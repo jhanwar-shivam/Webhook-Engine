@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: webhookengine
+  # PostgreSQL Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/webhook_engine
+    username: postgres
+    password: password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # Apache Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all # Guarantees message delivery to Kafka disk log
+      retries: 3
+    consumer:
+      group-id: webhook-dispatch-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+server:
+  port: 8080
+  # Enable Java 21 Virtual Threads across Spring MVC and Task Execution
+  threads:
+    virtual:
+      enabled: true

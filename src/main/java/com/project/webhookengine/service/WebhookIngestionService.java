@@ -24,6 +24,7 @@ public class WebhookIngestionService {
     private final WebhookSubscriptionRepository webhookSubscriptionRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
 
+    private final KafkaTemplate<String, String> kafkaTemplate;
     @Transactional
     public void processEvent(UUID tenantId, DispatchRequestDTO dispatchRequestDTO) {
         try {
@@ -39,6 +40,9 @@ public class WebhookIngestionService {
             }
             dispatchTaskRepository.saveAll(taskToDispatch);
 
+            for (DispatchTask task : taskToDispatch) {
+                kafkaTemplate.send("webhooks.dispatch", tenantId.toString(), task.getDispatchTaskId().toString());
+            }
 
         } catch (DataIntegrityViolationException e) {
             System.out.println("Duplicate event received for key: " + dispatchRequestDTO.idempotencyKey() + ". Ignoring.");

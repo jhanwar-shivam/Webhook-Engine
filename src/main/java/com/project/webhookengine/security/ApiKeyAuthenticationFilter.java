@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
-import org.springframework.data.redis.core.script.DigestUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -38,12 +37,20 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         Optional<Tenant> tenant = tenantRepository.findByApiKeyHash(hashedApiKey);
         if (tenant.isPresent()) {
             request.setAttribute("tenantId", tenant.get().getTenantId());
+            request.setAttribute("maxRps", tenant.get().getMaxRequestsPerSecond());
         } else  {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("No tenant found with this API Key");
             return;
         }
         filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        // If the path is NOT the dispatch endpoint, skip this filter
+        return !path.equals("/api/v1/events/dispatch");
     }
 
     private String hashApiKey(String apiKey) {
@@ -55,4 +62,6 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }
     }
+
+
 }

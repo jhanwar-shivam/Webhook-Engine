@@ -7,15 +7,16 @@ import com.project.webhookengine.dto.DispatchRequestDTO;
 import com.project.webhookengine.repository.WebhookEventRepository;
 import com.project.webhookengine.repository.WebhookSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WebhookIngestionService {
@@ -34,10 +35,9 @@ public class WebhookIngestionService {
             List<WebhookSubscription> subscriptionList = webhookSubscriptionRepository
                     .findByTenantAndEventTypeAndIsActiveTrue(tenantRef, dispatchRequestDTO.eventType());
 
-            List<DispatchTask> taskToDispatch = new ArrayList<>();
-            for (WebhookSubscription subscription : subscriptionList) {
-                taskToDispatch.add(createDispatchTask(subscription, webhookEvent));
-            }
+            List<DispatchTask> taskToDispatch = subscriptionList.stream()
+                    .map(subscription -> createDispatchTask(subscription, webhookEvent))
+                    .toList();
             dispatchTaskRepository.saveAll(taskToDispatch);
 
             for (DispatchTask task : taskToDispatch) {
@@ -45,7 +45,7 @@ public class WebhookIngestionService {
             }
 
         } catch (DataIntegrityViolationException e) {
-            System.out.println("Duplicate event received for key: " + dispatchRequestDTO.idempotencyKey() + ". Ignoring.");
+            log.warn("Duplicate event received for key: " + dispatchRequestDTO.idempotencyKey() + ". Ignoring.");
         }
     }
 

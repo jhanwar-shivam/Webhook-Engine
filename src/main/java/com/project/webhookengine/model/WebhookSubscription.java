@@ -2,21 +2,24 @@ package com.project.webhookengine.model;
 
 import jakarta.persistence.*;
 
-import lombok.Data;
+import lombok.*;
 
 import java.util.UUID;
 
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "webhook_subscriptions")
+@AllArgsConstructor
+@NoArgsConstructor
 public class WebhookSubscription {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private UUID webhookSubscriptionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id", nullable = false)
+    @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
     @Column(nullable = false)

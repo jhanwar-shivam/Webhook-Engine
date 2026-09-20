@@ -1,23 +1,28 @@
 package com.project.webhookengine.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Data
+@Getter
+@Setter
 @Table(name = "webhook_events")
+@AllArgsConstructor
+@NoArgsConstructor
 public class WebhookEvent {
     @Id
     @Column(columnDefinition = "uuid", nullable = false, updatable = false)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID webhookEventId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "tenant_id")
     private Tenant tenant;
 
     @Column(nullable = false)

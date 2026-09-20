@@ -1,19 +1,21 @@
 package com.project.webhookengine.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "tenants")
-@Data
-
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class Tenant {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private UUID tenantId;
 
     @Column(nullable = false)
     private String name;

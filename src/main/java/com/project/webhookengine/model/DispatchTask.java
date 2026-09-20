@@ -1,23 +1,32 @@
 package com.project.webhookengine.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name="dispatch_tasks")
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
 public class DispatchTask {
     @Id
     @Column(columnDefinition = "uuid", nullable = false, updatable = false)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID dispatchTaskId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id", nullable = false)
+    @JoinColumn(name = "webhook_event_id", nullable = false)
     private WebhookEvent webhookEvent;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id", nullable = false)
+    @JoinColumn(name = "webhook_subscription_id", nullable = false)
     private WebhookSubscription webhookSubscription;
     
     @Enumerated(EnumType.STRING)

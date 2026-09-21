@@ -42,4 +42,6 @@ public class DispatchTask {
     
     @Column(columnDefinition = "text")
     private String lastResponseMessage;
+
+    private Instant deliveredAt;
 }

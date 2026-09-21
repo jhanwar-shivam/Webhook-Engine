@@ -1,10 +1,10 @@
-package com.project.webhookengine.service;
+package com.project.webhookengine.utils;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import java.net.URI;
@@ -12,9 +12,9 @@ import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.Collections;
 
-@Service
+@Component
 @RequiredArgsConstructor
-public class RateLimitService {
+public class RateLimitUtil {
     private final StringRedisTemplate redisTemplate;
     private DefaultRedisScript<Long> tokenBucketScript;
 
@@ -25,24 +25,6 @@ public class RateLimitService {
         tokenBucketScript.setResultType(Long.class);
     }
 
-    public String extractDomain(String targetUrl) throws URISyntaxException {
-        if (targetUrl == null || targetUrl.isBlank()) {
-            throw new IllegalArgumentException("Target URL cannot be null or empty");
-        }
-
-        URI uri = new URI(targetUrl);
-        String domain = uri.getHost();
-
-        if (domain == null) {
-            throw new URISyntaxException(targetUrl, "Could not extract domain");
-        }
-
-        if (domain.startsWith("www.")) {
-            domain = domain.substring(4);
-        }
-
-        return domain;
-    }
 
     public boolean checkOutboundRateLimit(String domain, int capacity, int refillRatePerSecond) {
         String redisKey = "outbound_rate_limit:" + domain;

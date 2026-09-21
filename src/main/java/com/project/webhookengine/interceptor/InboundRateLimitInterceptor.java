@@ -27,7 +27,7 @@ public class InboundRateLimitInterceptor implements HandlerInterceptor {
         }
 
         long currentSecond = Instant.now().toEpochMilli();
-        String redisKey = "rate_limit:" + tenantId + ":" + currentSecond;
+        String redisKey = "inbound_rate_limit:" + tenantId + ":" + currentSecond;
 
         Long currentRequestCount = redisTemplate.opsForValue().increment(redisKey);
 

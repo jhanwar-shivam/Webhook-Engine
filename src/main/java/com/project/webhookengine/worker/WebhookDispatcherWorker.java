@@ -2,28 +2,17 @@ package com.project.webhookengine.worker;
 
 import com.project.webhookengine.dto.WebhookDeliveryResult;
 import com.project.webhookengine.dto.WebhookDispatchContext;
-import com.project.webhookengine.model.DispatchStatus;
 import com.project.webhookengine.model.DispatchTask;
 import com.project.webhookengine.model.WebhookEvent;
 import com.project.webhookengine.model.WebhookSubscription;
-import com.project.webhookengine.repository.DispatchTaskRepository;
 import com.project.webhookengine.utils.RateLimitUtil;
-import com.project.webhookengine.utils.SignatureUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.Nullable;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -63,7 +52,7 @@ public class WebhookDispatcherWorker {
                 executeAsyncDispatch(context);
             } else {
                 log.warn("Rate limit exceeded for domain: {}. Task {} delayed.", domain, dispatchTaskId);
-                // Phase 6 will handle delayed retry queueing here
+                dispatchTaskService.handleRateLimitExceeded(dispatchTaskId);
             }
         } catch (URISyntaxException e) {
             log.error("Invalid Target URL for task {}. URL: {}", dispatchTaskId, context.targetUrl());

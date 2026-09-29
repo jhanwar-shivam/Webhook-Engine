@@ -1,5 +1,7 @@
 package com.project.webhookengine.worker;
 
+import com.project.webhookengine.dto.WebhookDeliveryResult;
+import com.project.webhookengine.dto.WebhookDispatchContext;
 import com.project.webhookengine.model.DispatchStatus;
 import com.project.webhookengine.model.DispatchTask;
 import com.project.webhookengine.model.WebhookEvent;
@@ -32,14 +34,12 @@ import java.util.concurrent.Executors;
 @Component
 public class WebhookDispatcherWorker {
 
-    private final DispatchTaskRepository dispatchTaskRepository;
+    private final DispatchTaskService dispatchTaskService;
+    private final WebhookHttpClient webhookHttpClient;
     private final RateLimitUtil rateLimitUtil;
-    private final SignatureUtil signatureUtil;
+
 
     private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
 
     private static final Integer CAPACITY = 600;
     private static final Integer REFILL = 10;
@@ -49,109 +49,46 @@ public class WebhookDispatcherWorker {
     public void consumeDispatchTask(String dispatchTaskIdString) {
         UUID dispatchTaskId = UUID.fromString(dispatchTaskIdString);
 
-        DispatchTask dispatchTask = getDispatchTask(dispatchTaskId);
-        if (dispatchTask == null) {
+        Optional<DispatchTask> dispatchTaskOpt = dispatchTaskService.findById(dispatchTaskId);
+        if (dispatchTaskOpt.isEmpty()) {
+            log.error("dispatchTask not found for dispatchTaskId: {}", dispatchTaskId);
             return;
         }
-
-        WebhookSubscription subscription = dispatchTask.getWebhookSubscription();
-        WebhookEvent event = dispatchTask.getWebhookEvent();
-
-        String targetUrl = subscription.getTargetUrl();
-        String secretKey = subscription.getSecretKey();
-        String payload = event.getPayload();
-        String eventId = event.getWebhookEventId().toString();
-        String eventType = event.getEventType();
+        DispatchTask task = dispatchTaskOpt.get();
+        WebhookDispatchContext context = getDispatchContext(task);
 
         try {
-            String domain = extractDomain(targetUrl);
+            String domain = extractDomain(context.targetUrl());
             if (rateLimitUtil.checkOutboundRateLimit(domain, CAPACITY, REFILL)) {
-                executeAsyncDispatch(dispatchTaskId, targetUrl, secretKey, payload, eventId, eventType);
+                executeAsyncDispatch(context);
             } else {
                 log.warn("Rate limit exceeded for domain: {}. Task {} delayed.", domain, dispatchTaskId);
                 // Phase 6 will handle delayed retry queueing here
             }
         } catch (URISyntaxException e) {
-            log.error("Invalid Target URL for task {}. URL: {}", dispatchTaskId, targetUrl);
+            log.error("Invalid Target URL for task {}. URL: {}", dispatchTaskId, context.targetUrl());
         }
     }
 
-    private void executeAsyncDispatch(UUID dispatchTaskId,
-                                      String targetUrl,
-                                      String secretKey,
-                                      String payload,
-                                      String eventId,
-                                      String eventType) {
+    private WebhookDispatchContext getDispatchContext(DispatchTask task) {
+        WebhookSubscription subscription = task.getWebhookSubscription();
+        WebhookEvent event = task.getWebhookEvent();
+
+        return new WebhookDispatchContext(
+                task.getDispatchTaskId(),
+                subscription.getTargetUrl(),
+                subscription.getSecretKey(),
+                event.getPayload(),
+                event.getWebhookEventId().toString(),
+                event.getEventType()
+        );
+    }
+
+    private void executeAsyncDispatch(WebhookDispatchContext context) {
         virtualThreadExecutor.submit(() -> {
-            int statusCode = 0;
-            String responseSummary;
-            DispatchStatus status = DispatchStatus.RETRYING;
-            Instant deliveredAt = null;
-
-            log.info("Running on Virtual Thread: Preparing to dispatch task {} to URL: {}", dispatchTaskId, targetUrl);
-
-            try {
-                String signature = signatureUtil.generateSignature(payload, secretKey);
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(targetUrl))
-                        .timeout(Duration.ofSeconds(10))
-                        .header("Content-Type", "application/json")
-                        .header("X-Webhook-Signature", signature)
-                        .header("X-Webhook-Event-Id", eventId)
-                        .header("X-Webhook-Event-Type", eventType)
-                        .POST(HttpRequest.BodyPublishers.ofString(payload))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                statusCode = response.statusCode();
-
-                if (statusCode >= 200 && statusCode < 300) {
-                    status = DispatchStatus.DELIVERED;
-                    deliveredAt = Instant.now();
-                    responseSummary = "Delivered successfully";
-                } else {
-                    String body = response.body();
-                    responseSummary = (body != null && body.length() > 1000)
-                            ? body.substring(0, 1000) + "... [truncated]"
-                            : body;
-                }
-            } catch (IOException | InterruptedException e) {
-                if (e instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-                log.error("Network error delivering task {}: {}", dispatchTaskId, e.getMessage());
-                responseSummary = e.getClass().getSimpleName() + ": " + e.getMessage();
-            } catch (Exception e) {
-                log.error("Unexpected error executing dispatch for task {}: {}", dispatchTaskId, e.getMessage(), e);
-                responseSummary = "Internal Error: " + e.getMessage();
-            }
-
-            updateTaskOutcome(dispatchTaskId, status, statusCode, responseSummary, deliveredAt);
+            WebhookDeliveryResult result = webhookHttpClient.send(context);
+            dispatchTaskService.updateDeliveryOutcome(context.dispatchTaskId(),result);
         });
-    }
-
-    private void updateTaskOutcome(UUID dispatchTaskId,
-                                   DispatchStatus status,
-                                   int statusCode,
-                                   String responseSummary,
-                                   @Nullable Instant deliveredAt) {
-        Optional<DispatchTask> taskOpt = dispatchTaskRepository.findById(dispatchTaskId);
-        if (taskOpt.isEmpty()) {
-            log.error("Unable to update task outcome: task {} not found", dispatchTaskId);
-            return;
-        }
-
-        DispatchTask task = taskOpt.get();
-        task.setAttemptCount(task.getAttemptCount() + 1);
-        task.setLastResponseCode(statusCode);
-        task.setLastResponseMessage(responseSummary);
-        task.setDispatchStatus(status);
-        if (deliveredAt != null) {
-            task.setDeliveredAt(deliveredAt);
-        }
-
-        dispatchTaskRepository.save(task);
     }
 
     private String extractDomain(String targetUrl) throws URISyntaxException {
@@ -171,15 +108,5 @@ public class WebhookDispatcherWorker {
         }
 
         return domain;
-    }
-
-    private @Nullable DispatchTask getDispatchTask(UUID dispatchTaskId) {
-        Optional<DispatchTask> dispatchTaskOpt = dispatchTaskRepository.findById(dispatchTaskId);
-        if (dispatchTaskOpt.isEmpty()) {
-            log.error("Dispatch task not found for dispatchTaskId {}", dispatchTaskId);
-            return null;
-        }
-
-        return dispatchTaskOpt.get();
     }
 }

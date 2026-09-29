@@ -15,7 +15,7 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 public class InboundRateLimitInterceptor implements HandlerInterceptor {
-    StringRedisTemplate redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     @Override
     public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws Exception {

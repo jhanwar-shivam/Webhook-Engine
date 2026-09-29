@@ -36,6 +36,9 @@ public class DispatchTask {
     @Column(nullable = false)
     private Integer attemptCount = 0;
 
+    @Column(nullable = false)
+    private Integer throttleCount = 0;
+
     private Instant nextRetryAt;
 
     private Integer lastResponseCode;

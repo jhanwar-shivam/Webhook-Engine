@@ -1,7 +1,6 @@
 spring:
   application:
     name: webhookengine
-  # PostgreSQL Configuration
   datasource:
     url: jdbc:postgresql://localhost:5432/webhook_engine
     username: postgres
@@ -10,24 +9,22 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
 
-  # Redis Configuration
   data:
     redis:
       host: localhost
       port: 6379
 
-  # Apache Kafka Configuration
   kafka:
     bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all # Guarantees message delivery to Kafka disk log
+      acks: all
       retries: 3
     consumer:
       group-id: webhook-dispatch-group
@@ -37,7 +34,28 @@ spring:
 
 server:
   port: 8080
-  # Enable Java 21 Virtual Threads across Spring MVC and Task Execution
   threads:
     virtual:
       enabled: true
+
+webhook:
+  api:
+    dispatch-path: /api/v1/events/dispatch
+  kafka:
+    dispatch-concurrency: 3
+    topics:
+      dispatch: webhooks.dispatch
+      retry-10s: webhooks.retry.10s
+      retry-1m: webhooks.retry.1m
+      retry-5m: webhooks.retry.5m
+      dlq: webhooks.dlq
+  retry:
+    max-delivery-attempts: 4
+    max-throttle-retries: 100
+  outbound-rate-limit:
+    bucket-capacity: 600
+    refill-per-second: 10
+  dispatch:
+    connect-timeout-seconds: 5
+    http-timeout-seconds: 10
+    listener-timeout-seconds: 30

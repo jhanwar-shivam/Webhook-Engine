@@ -12,7 +12,10 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
-@Table(name = "webhook_events")
+@Table(
+        name = "webhook_events",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "idempotency_key"})
+)
 @AllArgsConstructor
 @NoArgsConstructor
 public class WebhookEvent {
@@ -32,7 +35,7 @@ public class WebhookEvent {
     @Column(nullable = false)
     private String payload;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String idempotencyKey;
 
     @Column(nullable = false, updatable = false)

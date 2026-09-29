@@ -1,6 +1,7 @@
 package com.project.webhookengine.controller;
 
 
+import com.project.webhookengine.api.WebhookApiPaths;
 import com.project.webhookengine.dto.DispatchRequestDTO;
 import com.project.webhookengine.service.WebhookIngestionService;
 import jakarta.validation.Valid;
@@ -18,7 +19,7 @@ import java.util.UUID;
 public class WebhookIngestionController {
     private final WebhookIngestionService webhookIngestionService;
 
-    @PostMapping("events/dispatch")
+    @PostMapping(WebhookApiPaths.DISPATCH_SUFFIX)
     public ResponseEntity<Void> dispatchEvent(@RequestAttribute("tenantId") UUID tenantId, @Valid @RequestBody DispatchRequestDTO dispatchRequestDTO) {
         webhookIngestionService.processEvent(tenantId, dispatchRequestDTO);
         return ResponseEntity.accepted().build();

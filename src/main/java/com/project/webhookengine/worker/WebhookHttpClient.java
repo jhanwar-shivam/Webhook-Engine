@@ -1,9 +1,9 @@
 package com.project.webhookengine.worker;
 
+import com.project.webhookengine.config.WebhookProperties;
 import com.project.webhookengine.dto.WebhookDeliveryResult;
 import com.project.webhookengine.dto.WebhookDispatchContext;
 import com.project.webhookengine.utils.SignatureUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -17,19 +17,26 @@ import java.time.Instant;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class WebhookHttpClient {
+
     private final SignatureUtil signatureUtil;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
+    private final HttpClient httpClient;
+    private final WebhookProperties webhookProperties;
+
+    public WebhookHttpClient(SignatureUtil signatureUtil, WebhookProperties webhookProperties) {
+        this.signatureUtil = signatureUtil;
+        this.webhookProperties = webhookProperties;
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(webhookProperties.dispatch().connectTimeoutSeconds()))
+                .build();
+    }
 
     public WebhookDeliveryResult send(WebhookDispatchContext context) {
         try {
             String signature = signatureUtil.generateSignature(context.payload(), context.secretKey());
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(context.targetUrl()))
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(webhookProperties.dispatch().httpTimeoutSeconds()))
                     .header("Content-Type", "application/json")
                     .header("X-Webhook-Signature", signature)
                     .header("X-Webhook-Event-Id", context.eventId())
@@ -44,7 +51,7 @@ public class WebhookHttpClient {
             boolean isSuccess = statusCode >= 200 && statusCode < 300;
 
             String responseSummary = isSuccess ? "Delivered Successfully" : truncate(response.body());
-            Instant deliveredAt = (isSuccess) ? Instant.now(): null;
+            Instant deliveredAt = isSuccess ? Instant.now() : null;
 
             return new WebhookDeliveryResult(statusCode, responseSummary, isSuccess, deliveredAt);
         } catch (IOException | InterruptedException e) {
@@ -60,7 +67,9 @@ public class WebhookHttpClient {
     }
 
     private String truncate(String body) {
-        if (body == null) return "No response body";
+        if (body == null) {
+            return "No response body";
+        }
         return body.length() > 1000 ? body.substring(0, 1000) + "...[truncated]" : body;
     }
 }

@@ -1,5 +1,6 @@
 package com.project.webhookengine.config;
 
+import com.project.webhookengine.api.WebhookApiPaths;
 import com.project.webhookengine.interceptor.InboundRateLimitInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,6 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(inboundRateLimitInterceptor)
-                .addPathPatterns("/api/v1/events/dispatch");
+                .addPathPatterns(WebhookApiPaths.DISPATCH);
     }
 }

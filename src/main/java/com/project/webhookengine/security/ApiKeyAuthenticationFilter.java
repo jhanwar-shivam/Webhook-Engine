@@ -1,5 +1,6 @@
 package com.project.webhookengine.security;
 
+import com.project.webhookengine.api.WebhookApiPaths;
 import com.project.webhookengine.model.Tenant;
 import com.project.webhookengine.repository.TenantRepository;
 import jakarta.servlet.FilterChain;
@@ -14,7 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Optional;
 
 
@@ -50,14 +51,14 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         // If the path is NOT the dispatch endpoint, skip this filter
-        return !path.equals("/api/v1/events/dispatch");
+        return !path.equals(WebhookApiPaths.DISPATCH);
     }
 
     private String hashApiKey(String apiKey) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(apiKey.getBytes());
-            return Base64.getEncoder().encodeToString(hashBytes);
+            return HexFormat.of().formatHex(hashBytes);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }

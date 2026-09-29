@@ -1,15 +1,19 @@
 package com.project.webhookengine.service;
 
-import com.project.webhookengine.model.*;
+import com.project.webhookengine.dto.DispatchRequestDTO;
+import com.project.webhookengine.messaging.DispatchMessagePublisher;
+import com.project.webhookengine.model.DispatchStatus;
+import com.project.webhookengine.model.DispatchTask;
+import com.project.webhookengine.model.Tenant;
+import com.project.webhookengine.model.WebhookEvent;
+import com.project.webhookengine.model.WebhookSubscription;
 import com.project.webhookengine.repository.DispatchTaskRepository;
 import com.project.webhookengine.repository.TenantRepository;
-import com.project.webhookengine.dto.DispatchRequestDTO;
 import com.project.webhookengine.repository.WebhookEventRepository;
 import com.project.webhookengine.repository.WebhookSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +24,13 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class WebhookIngestionService {
+
     private final TenantRepository tenantRepository;
     private final WebhookEventRepository webhookEventRepository;
     private final WebhookSubscriptionRepository webhookSubscriptionRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
+    private final DispatchMessagePublisher dispatchMessagePublisher;
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
     @Transactional
     public void processEvent(UUID tenantId, DispatchRequestDTO dispatchRequestDTO) {
         try {
@@ -35,17 +40,21 @@ public class WebhookIngestionService {
             List<WebhookSubscription> subscriptionList = webhookSubscriptionRepository
                     .findByTenantAndEventTypeAndIsActiveTrue(tenantRef, dispatchRequestDTO.eventType());
 
-            List<DispatchTask> taskToDispatch = subscriptionList.stream()
+            List<DispatchTask> tasksToDispatch = subscriptionList.stream()
                     .map(subscription -> createDispatchTask(subscription, webhookEvent))
                     .toList();
-            dispatchTaskRepository.saveAll(taskToDispatch);
+            dispatchTaskRepository.saveAll(tasksToDispatch);
 
-            for (DispatchTask task : taskToDispatch) {
-                kafkaTemplate.send("webhooks.dispatch", tenantId.toString(), task.getDispatchTaskId().toString());
+            String partitionKey = tenantId.toString();
+            for (DispatchTask task : tasksToDispatch) {
+                dispatchMessagePublisher.publishDispatchAfterCommit(
+                        partitionKey,
+                        task.getDispatchTaskId().toString()
+                );
             }
-
         } catch (DataIntegrityViolationException e) {
-            log.warn("Duplicate event received for key: " + dispatchRequestDTO.idempotencyKey() + ". Ignoring.");
+            log.warn("Duplicate event received for tenant {} key {}. Ignoring.",
+                    tenantId, dispatchRequestDTO.idempotencyKey());
         }
     }
 
@@ -55,7 +64,7 @@ public class WebhookIngestionService {
         dispatchTask.setWebhookSubscription(subscription);
         dispatchTask.setDispatchStatus(DispatchStatus.PENDING);
         dispatchTask.setAttemptCount(0);
-
+        dispatchTask.setThrottleCount(0);
         return dispatchTask;
     }
 
@@ -65,8 +74,6 @@ public class WebhookIngestionService {
         webhookEvent.setEventType(dispatchRequestDTO.eventType());
         webhookEvent.setPayload(dispatchRequestDTO.payload().toString());
         webhookEvent.setIdempotencyKey(dispatchRequestDTO.idempotencyKey());
-
-        webhookEventRepository.save(webhookEvent);
-        return  webhookEvent;
+        return webhookEventRepository.save(webhookEvent);
     }
 }

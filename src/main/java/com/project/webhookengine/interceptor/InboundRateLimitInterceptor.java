@@ -1,24 +1,27 @@
 package com.project.webhookengine.interceptor;
 
+import com.project.webhookengine.utils.RateLimitUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
 public class InboundRateLimitInterceptor implements HandlerInterceptor {
-    private final StringRedisTemplate redisTemplate;
+
+    private final RateLimitUtil rateLimitUtil;
+
     @Override
-    public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
-            throws Exception {
+    public boolean preHandle(
+            HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull Object handler
+    ) throws Exception {
         UUID tenantId = (UUID) request.getAttribute("tenantId");
         Integer maxRequestsPerSecond = (Integer) request.getAttribute("maxRps");
 
@@ -26,21 +29,12 @@ public class InboundRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        long currentSecond = Instant.now().toEpochMilli();
-        String redisKey = "inbound_rate_limit:" + tenantId + ":" + currentSecond;
-
-        Long currentRequestCount = redisTemplate.opsForValue().increment(redisKey);
-
-        if (currentRequestCount != null && currentRequestCount == 1) {
-            redisTemplate.expire(redisKey, Duration.ofSeconds(2));
+        if (rateLimitUtil.checkInboundRateLimit(tenantId, maxRequestsPerSecond)) {
+            return true;
         }
 
-        if (currentRequestCount != null && currentRequestCount > maxRequestsPerSecond) {
-            response.setStatus(429); // 429 Too Many Requests
-            response.getWriter().write("Rate limit exceeded. Maximum RPS: " + maxRequestsPerSecond);
-            return false;
-        }
-
-        return true;
+        response.setStatus(429);
+        response.getWriter().write("Rate limit exceeded. Maximum RPS: " + maxRequestsPerSecond);
+        return false;
     }
 }
